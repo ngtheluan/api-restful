@@ -1,11 +1,22 @@
 import { Request, Response } from 'express'
+import { APIFeatures } from '../libs/feature'
 import Products from '../models/productModel'
 
 const productController = {
 	getProducts: async (req: Request, res: Response) => {
 		try {
-			const products = await Products.find()
-			return res.status(200).json(products)
+			const feature = new APIFeatures(Products.find(), req.query)
+				.pagination()
+				.sorting()
+				.searching()
+				.filtering()
+
+			const result = await Promise.allSettled([feature.query, Products.countDocuments()])
+
+			const products = result[0].status === 'fulfilled' ? result[0].value : []
+			const count = result[1].status === 'fulfilled' ? result[1].value : 0
+
+			return res.status(200).json({ products, count })
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Internal server error'
 			return res.status(500).json({ message })
