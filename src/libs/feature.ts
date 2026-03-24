@@ -1,5 +1,5 @@
 import { Query } from 'mongoose'
-import { ParsedQs } from 'qs'
+import qs, { ParsedQs } from 'qs'
 
 export class APIFeatures<T> {
 	query: Query<T[], T>
@@ -10,9 +10,9 @@ export class APIFeatures<T> {
 		this.queryString = queryString
 	}
 
-	pagination() {
+	paginating() {
 		const page = Number(this.queryString.page) || 1
-		const limit = Number(this.queryString.limit) || 5
+		const limit = Number(this.queryString.limit)
 		const skip = limit * (page - 1)
 		this.query = this.query.skip(skip).limit(limit)
 		return this
@@ -35,15 +35,41 @@ export class APIFeatures<T> {
 	}
 
 	filtering = () => {
-		const queryObj = { ...this.queryString }
+		// 👉 parse lại query để hỗ trợ price[gte]
+		const parsedQuery = qs.parse(this.queryString as any)
+
+		const queryObj: any = { ...parsedQuery }
 
 		const excludedFields = ['page', 'sort', 'limit', 'search']
 		excludedFields.forEach((el) => delete queryObj[el])
 
 		let queryStr = JSON.stringify(queryObj)
+
+		// 👉 thêm $ cho mongo operator
 		queryStr = queryStr.replace(/\b(gte|gt|lt|lte|regex)\b/g, (match) => '$' + match)
 
-		this.query = this.query.find(JSON.parse(queryStr))
+		let mongoQuery = JSON.parse(queryStr)
+
+		// 👉 convert string -> number (quan trọng)
+		Object.keys(mongoQuery).forEach((field) => {
+			if (typeof mongoQuery[field] === 'object') {
+				Object.keys(mongoQuery[field]).forEach((op) => {
+					const value = mongoQuery[field][op]
+
+					// nếu là số thì convert
+					if (!isNaN(value)) {
+						mongoQuery[field][op] = Number(value)
+					}
+				})
+			}
+		})
+
+		this.query = this.query.find(mongoQuery)
+
 		return this
+	}
+
+	counting = () => {
+		return this.query.model.countDocuments(this.query.getFilter())
 	}
 }

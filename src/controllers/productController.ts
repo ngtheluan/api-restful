@@ -1,17 +1,26 @@
 import { Request, Response } from 'express'
+
 import { APIFeatures } from '../libs/feature'
 import Products from '../models/productModel'
 
 const productController = {
 	getProducts: async (req: Request, res: Response) => {
 		try {
-			const feature = new APIFeatures(Products.find(), req.query)
-				.pagination()
+			const features = new APIFeatures(Products.find(), req.query)
+				.paginating()
 				.sorting()
 				.searching()
 				.filtering()
 
-			const result = await Promise.allSettled([feature.query, Products.countDocuments()])
+			const countingQuery = new APIFeatures(Products.find(), req.query)
+				.searching()
+				.filtering()
+				.counting()
+
+			const result = await Promise.allSettled([
+				features.query,
+				countingQuery, //count number of products.
+			])
 
 			const products = result[0].status === 'fulfilled' ? result[0].value : []
 			const count = result[1].status === 'fulfilled' ? result[1].value : 0
